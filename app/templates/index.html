@@ -1,0 +1,946 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>LLM Test Generator</title>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #f0f2f5;
+    color: #1f2937;
+    min-height: 100vh;
+  }
+
+  header {
+    background: #1e3a5f;
+    color: #fff;
+    padding: 18px 32px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    box-shadow: 0 2px 6px rgba(0,0,0,.25);
+  }
+  header h1 { font-size: 1.25rem; font-weight: 600; letter-spacing: .02em; }
+  header span { font-size: .85rem; opacity: .7; margin-top: 2px; }
+
+  .container { max-width: 960px; margin: 36px auto; padding: 0 20px; }
+
+  /* Card */
+  .card {
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.1);
+    padding: 28px 32px;
+    margin-bottom: 24px;
+  }
+  .card h2 { font-size: 1rem; font-weight: 600; color: #1e3a5f; margin-bottom: 18px; }
+
+  /* Drop zone — must be display:block so border/padding fill the row */
+  #dropzone {
+    display: block;
+    border: 2px dashed #93c5fd;
+    border-radius: 8px;
+    padding: 40px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: background .15s, border-color .15s;
+    color: #6b7280;
+    font-size: .95rem;
+    width: 100%;
+  }
+  #dropzone.over, #dropzone:hover { background: #eff6ff; border-color: #3b82f6; }
+  #dropzone.filled { background: #f0fdf4; border-color: #22c55e; color: #166534; }
+  #dropzone svg { display: block; margin: 0 auto 10px; }
+  #file-name { margin-top: 8px; font-size: .85rem; font-weight: 500; }
+
+  /* Mode chips */
+  .mode-group { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 4px; }
+  .mode-chip { display: flex; align-items: center; gap: 7px; cursor: pointer; }
+  .mode-chip input[type=checkbox] { width: 16px; height: 16px; cursor: pointer; accent-color: #2563eb; }
+  .mode-chip label {
+    cursor: pointer;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: .88rem;
+    font-weight: 500;
+    border: 1.5px solid #d1d5db;
+    transition: all .15s;
+    user-select: none;
+  }
+  .mode-chip input:checked + label {
+    background: #2563eb; color: #fff; border-color: #2563eb;
+  }
+
+  /* Button row */
+  .btn-row {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-top: 22px;
+  }
+
+  /* Run button */
+  #run-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 11px 28px;
+    background: #2563eb;
+    color: #fff;
+    border: none;
+    border-radius: 7px;
+    font-size: .95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .15s;
+  }
+  #run-btn:hover { background: #1d4ed8; }
+  #run-btn:disabled { background: #93c5fd; cursor: not-allowed; }
+
+  /* Chunk Explorer toggle button */
+  .chunk-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 10px 18px;
+    background: #eff6ff;
+    border: 1.5px solid #bfdbfe;
+    border-radius: 7px;
+    color: #1d4ed8;
+    font-size: .9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .chunk-toggle:hover { background: #dbeafe; border-color: #93c5fd; }
+
+  /* Progress */
+  #progress-section { display: none; }
+  .progress-bar-wrap {
+    background: #e5e7eb; border-radius: 99px; height: 6px; margin-bottom: 14px;
+  }
+  .progress-bar {
+    background: #2563eb; height: 6px; border-radius: 99px;
+    transition: width .4s ease;
+    width: 0%;
+  }
+  #log-box {
+    background: #0f172a;
+    color: #94a3b8;
+    border-radius: 8px;
+    padding: 16px 18px;
+    font-family: "SF Mono", "Fira Code", monospace;
+    font-size: .82rem;
+    line-height: 1.7;
+    max-height: 280px;
+    overflow-y: auto;
+  }
+  #log-box .ok  { color: #4ade80; }
+  #log-box .err { color: #f87171; }
+  #log-box .dim { color: #64748b; }
+
+  /* Results */
+  #results-section { display: none; }
+
+  /* Summary cards */
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 14px;
+    margin-bottom: 24px;
+  }
+  .summary-card {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 16px 18px;
+  }
+  .summary-card .mode-label {
+    font-size: .78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: #64748b;
+    margin-bottom: 6px;
+  }
+  .summary-card .metric { display: flex; justify-content: space-between; margin-top: 4px; font-size: .88rem; }
+  .summary-card .metric .val { font-weight: 600; color: #1e3a5f; }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 0; border-bottom: 2px solid #e5e7eb; margin-bottom: 20px; }
+  .tab-btn {
+    padding: 9px 18px;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    font-size: .88rem;
+    font-weight: 500;
+    color: #6b7280;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .tab-btn.active { color: #2563eb; border-bottom-color: #2563eb; }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* Table */
+  .data-table { width: 100%; border-collapse: collapse; font-size: .87rem; }
+  .data-table th {
+    text-align: left;
+    padding: 9px 12px;
+    background: #f8fafc;
+    border-bottom: 1.5px solid #e2e8f0;
+    font-weight: 600;
+    color: #374151;
+    white-space: nowrap;
+  }
+  .data-table td { padding: 9px 12px; border-bottom: 1px solid #f1f5f9; }
+  .data-table tr:last-child td { border-bottom: none; }
+  .data-table tr:hover td { background: #f8fafc; }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 99px;
+    font-size: .78rem;
+    font-weight: 600;
+  }
+  .badge-ok  { background: #dcfce7; color: #166534; }
+  .badge-warn{ background: #fef9c3; color: #854d0e; }
+  .badge-err { background: #fee2e2; color: #991b1b; }
+
+  /* Failures */
+  .failure-item {
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    margin-bottom: 8px;
+    overflow: hidden;
+  }
+  .failure-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    background: #f8fafc;
+    cursor: pointer;
+    font-size: .87rem;
+  }
+  .failure-header:hover { background: #f1f5f9; }
+  .failure-body { padding: 12px 14px; font-size: .84rem; background: #fff; }
+  .failure-body code {
+    display: block;
+    background: #0f172a;
+    color: #94a3b8;
+    padding: 8px 12px;
+    border-radius: 5px;
+    font-family: monospace;
+    font-size: .82rem;
+    margin-top: 6px;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+
+  /* Downloads */
+  .dl-grid { display: flex; flex-wrap: wrap; gap: 10px; }
+  .dl-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border: 1.5px solid #2563eb;
+    border-radius: 6px;
+    color: #2563eb;
+    font-size: .87rem;
+    font-weight: 500;
+    text-decoration: none;
+    transition: all .15s;
+    cursor: pointer;
+    background: #fff;
+  }
+  .dl-btn:hover { background: #2563eb; color: #fff; }
+
+  /* Markdown report */
+  #report-content { font-size: .9rem; line-height: 1.7; }
+  #report-content h1,h2,h3 { color: #1e3a5f; margin: 18px 0 8px; }
+  #report-content table {
+    border-collapse: collapse; width: 100%; font-size: .85rem; margin: 12px 0;
+  }
+  #report-content th, #report-content td {
+    border: 1px solid #e2e8f0; padding: 7px 10px; text-align: left;
+  }
+  #report-content th { background: #f8fafc; font-weight: 600; }
+  #report-content code { background: #f1f5f9; padding: 1px 5px; border-radius: 3px; }
+
+  .empty-state { color: #9ca3af; font-size: .9rem; text-align: center; padding: 24px 0; }
+
+  /* Chunk explorer card */
+  #chunk-explorer { display: none; }
+
+  .chunk-controls { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; align-items: center; }
+  .chunk-controls select {
+    padding: 7px 12px; border-radius: 6px; font-size: .87rem;
+    border: 1.5px solid #d1d5db; background: #fff; cursor: pointer;
+    flex: 1; min-width: 180px;
+  }
+  .chunk-controls button {
+    padding: 7px 18px; border-radius: 6px; font-size: .87rem;
+    background: #2563eb; color: #fff; border: none; font-weight: 600; cursor: pointer;
+    transition: background .15s;
+  }
+  .chunk-controls button:hover { background: #1d4ed8; }
+  .chunk-controls button:disabled { background: #93c5fd; cursor: not-allowed; }
+
+  .chunk-meta {
+    display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; font-size: .83rem;
+  }
+  .chunk-meta .pill {
+    padding: 4px 12px; border-radius: 99px; font-weight: 600;
+    background: #f1f5f9; color: #374151; border: 1px solid #e2e8f0;
+  }
+
+  .chunk-section {
+    border-left: 3px solid; padding: 10px 14px; margin-bottom: 10px;
+    border-radius: 0 6px 6px 0; background: #f8fafc;
+  }
+  .chunk-section .cs-label {
+    font-size: .75rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .06em; margin-bottom: 6px;
+  }
+  .chunk-section pre {
+    font-family: "SF Mono","Fira Code",monospace; font-size: .8rem;
+    line-height: 1.6; white-space: pre-wrap; word-break: break-word;
+    color: #1e293b; max-height: 240px; overflow-y: auto; margin: 0;
+  }
+  .cs-imports  { border-color: #60a5fa; } .cs-imports .cs-label  { color: #2563eb; }
+  .cs-class    { border-color: #a78bfa; } .cs-class .cs-label    { color: #7c3aed; }
+  .cs-target   { border-color: #34d399; } .cs-target .cs-label   { color: #059669; }
+  .cs-deps     { border-color: #fb923c; } .cs-deps .cs-label     { color: #ea580c; }
+  .cs-summary  { border-color: #94a3b8; } .cs-summary .cs-label  { color: #475569; }
+
+  /* New run button */
+  #new-run-btn {
+    padding: 8px 18px;
+    border: 1.5px solid #6b7280;
+    border-radius: 6px;
+    background: #fff;
+    color: #374151;
+    font-size: .87rem;
+    cursor: pointer;
+    margin-top: 4px;
+  }
+  #new-run-btn:hover { background: #f9fafb; }
+</style>
+</head>
+<body>
+
+<header>
+  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/>
+  </svg>
+  <div>
+    <h1>LLM Test Generator</h1>
+    <span>Automated unit test generation &amp; evaluation</span>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- ── Upload card ─────────────────────────────────────────── -->
+  <div class="card" id="upload-card">
+    <h2>Upload Python File</h2>
+
+    <label id="dropzone" for="file-input">
+      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#93c5fd" stroke-width="1.5">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="17 8 12 3 7 8"/>
+        <line x1="12" y1="3" x2="12" y2="15"/>
+      </svg>
+      <div>Drop your <strong>.py</strong> file here, or click to browse</div>
+      <div id="file-name" style="display:none"></div>
+    </label>
+    <input type="file" id="file-input" accept=".py" style="display:none" />
+
+    <div style="margin-top:20px;">
+      <div style="font-size:.88rem;font-weight:600;color:#374151;margin-bottom:10px;">Generation mode</div>
+      <div class="mode-group">
+        <div class="mode-chip">
+          <input type="checkbox" id="mode-sa" value="source_aware" checked />
+          <label for="mode-sa">Source-Aware</label>
+        </div>
+      </div>
+      <div style="margin-top:10px;font-size:.81rem;color:#6b7280;">
+        <strong>Source-Aware</strong> — LLM sees full source code + dependencies
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button id="run-btn" disabled>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <polygon points="5 3 19 12 5 21 5 3"/>
+        </svg>
+        Generate &amp; Test
+      </button>
+      <button class="chunk-toggle" id="chunk-toggle-btn" style="display:none" onclick="toggleChunkExplorer()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+        Chunk Explorer
+      </button>
+    </div>
+  </div>
+
+  <!-- ── Chunk Explorer card ────────────────────────────────── -->
+  <div class="card" id="chunk-explorer">
+    <h2>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:6px"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+      Chunk Explorer
+    </h2>
+    <p style="font-size:.85rem;color:#6b7280;margin-bottom:18px;">
+      Preview exactly what context gets assembled for each function and chunking strategy — before spending any API tokens.
+    </p>
+
+    <div class="chunk-controls">
+      <select id="ce-func-sel"><option value="">— select function —</option></select>
+      <select id="ce-mode-sel">
+        <option value="function_only">function_only — target + imports</option>
+        <option value="function_plus_deps">function_plus_deps — target + helpers</option>
+        <option value="class_context" selected>class_context — class shell + deps</option>
+        <option value="hierarchical_summary">hierarchical_summary — full detail + stubs</option>
+        <option value="token_budget">token_budget — greedy fill to 6 000 tokens</option>
+        <option value="full_source">full_source — entire file</option>
+      </select>
+      <button id="ce-preview-btn" onclick="previewChunk()" disabled>Preview</button>
+    </div>
+
+    <div id="ce-error" style="display:none;color:#dc2626;font-size:.85rem;margin-bottom:10px;"></div>
+    <div id="ce-result" style="display:none">
+      <div class="chunk-meta" id="ce-meta"></div>
+      <div id="ce-sections"></div>
+    </div>
+  </div>
+
+  <!-- ── Progress card ───────────────────────────────────────── -->
+  <div class="card" id="progress-section">
+    <h2 id="progress-title">Running…</h2>
+    <div class="progress-bar-wrap"><div class="progress-bar" id="progress-bar"></div></div>
+    <div id="log-box"></div>
+  </div>
+
+  <!-- ── Results card ────────────────────────────────────────── -->
+  <div class="card" id="results-section">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">
+      <h2 style="margin-bottom:0">Results</h2>
+      <button id="new-run-btn">&#8592; New run</button>
+    </div>
+
+    <div id="summary-grid" class="summary-grid"></div>
+
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="per-function">Per-Function</button>
+      <button class="tab-btn" data-tab="failures">Failures</button>
+      <button class="tab-btn" data-tab="chunks">Chunks</button>
+      <button class="tab-btn" data-tab="report">Report</button>
+      <button class="tab-btn" data-tab="downloads">Downloads</button>
+    </div>
+
+    <div class="tab-panel active" id="tab-per-function">
+      <div style="overflow-x:auto;">
+        <table class="data-table" id="per-func-table">
+          <thead>
+            <tr>
+              <th>Function</th><th>Category</th><th>Mode</th>
+              <th>Tests</th><th>Passed</th><th>Pass Rate</th>
+              <th>Func Cov</th><th>Mut Score</th><th>Val Assert</th>
+            </tr>
+          </thead>
+          <tbody id="per-func-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="tab-panel" id="tab-failures">
+      <div id="failures-list"></div>
+    </div>
+
+    <div class="tab-panel" id="tab-chunks">
+      <p style="font-size:.85rem;color:#6b7280;margin-bottom:16px;">
+        Inspect the assembled context sent to the LLM for any function and strategy.
+      </p>
+      <div class="chunk-controls">
+        <select id="rc-func-sel"><option value="">— select function —</option></select>
+        <select id="rc-mode-sel">
+          <option value="function_only">function_only</option>
+          <option value="function_plus_deps">function_plus_deps</option>
+          <option value="class_context" selected>class_context</option>
+          <option value="hierarchical_summary">hierarchical_summary</option>
+          <option value="token_budget">token_budget</option>
+          <option value="full_source">full_source</option>
+        </select>
+        <button id="rc-preview-btn" onclick="previewJobChunk()">Preview</button>
+      </div>
+      <div id="rc-error" style="display:none;color:#dc2626;font-size:.85rem;margin-bottom:10px;"></div>
+      <div id="rc-result" style="display:none">
+        <div class="chunk-meta" id="rc-meta"></div>
+        <div id="rc-sections"></div>
+      </div>
+    </div>
+
+    <div class="tab-panel" id="tab-report">
+      <div id="report-content"></div>
+    </div>
+
+    <div class="tab-panel" id="tab-downloads">
+      <p style="font-size:.87rem;color:#6b7280;margin-bottom:14px;">
+        Download all generated artefacts for this run.
+      </p>
+      <div class="dl-grid" id="dl-grid"></div>
+    </div>
+  </div>
+
+</div><!-- /container -->
+
+<script>
+// ── State ──────────────────────────────────────────────────────
+let jobId = null;
+let pollTimer = null;
+let uploadedFile = null;
+let lastLogLen = 0;
+
+// ── File upload ─────────────────────────────────────────────────
+const dropzone  = document.getElementById('dropzone');
+const fileInput = document.getElementById('file-input');
+const runBtn    = document.getElementById('run-btn');
+const fileName  = document.getElementById('file-name');
+
+async function setFile(f) {
+  if (!f || !f.name.endsWith('.py')) { alert('Please upload a .py file.'); return; }
+  uploadedFile = f;
+  fileName.textContent = f.name;
+  fileName.style.display = 'block';
+  dropzone.classList.add('filled');
+  runBtn.disabled = false;
+
+  // Parse file immediately so Chunk Explorer is available before running
+  try {
+    const fd = new FormData();
+    fd.append('file', f);
+    const res = await fetch('/api/parse', { method: 'POST', body: fd });
+    if (res.ok) {
+      const data = await res.json();
+      populateChunkFuncSel(data.functions || []);
+    }
+  } catch (_) { /* non-fatal */ }
+}
+
+fileInput.addEventListener('change', () => { if (fileInput.files[0]) setFile(fileInput.files[0]); });
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('over'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('over'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropzone.classList.remove('over');
+  setFile(e.dataTransfer.files[0]);
+});
+
+// ── Run ─────────────────────────────────────────────────────────
+runBtn.addEventListener('click', async () => {
+  if (!uploadedFile) return;
+  const modes = [...document.querySelectorAll('.mode-chip input:checked')].map(c => c.value);
+  if (!modes.length) { alert('Select at least one mode.'); return; }
+
+  runBtn.disabled = true;
+  lastLogLen = 0;
+
+  const fd = new FormData();
+  fd.append('file', uploadedFile);
+  fd.append('modes', modes.join(','));
+
+  let res;
+  try {
+    res = await fetch('/api/generate', { method: 'POST', body: fd });
+  } catch (e) {
+    alert('Network error: ' + e.message); runBtn.disabled = false; return;
+  }
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    alert('Error: ' + (err.detail || res.statusText)); runBtn.disabled = false; return;
+  }
+
+  const data = await res.json();
+  jobId = data.job_id;
+  populateChunkFuncSel(data.functions || []);
+
+  show('progress-section');
+  hide('upload-card');
+  hide('chunk-explorer');
+  hide('results-section');
+  document.getElementById('progress-title').textContent =
+    `Running — ${data.functions.length} function(s) × ${modes.length} mode(s)`;
+  document.getElementById('log-box').innerHTML = '';
+  document.getElementById('progress-bar').style.width = '5%';
+
+  startPolling();
+});
+
+// ── Polling ─────────────────────────────────────────────────────
+function startPolling() {
+  pollTimer = setInterval(poll, 1800);
+}
+
+async function poll() {
+  if (!jobId) return;
+
+  try {
+    const res = await fetch(`/api/jobs/${jobId}`);
+
+    if (res.status === 404) {
+      clearInterval(pollTimer);
+      document.getElementById('progress-title').textContent = 'Job not found';
+      document.getElementById('log-box').innerHTML +=
+        '<div class="err">Job not found. It may have been lost after a server reload.</div>';
+      runBtn.disabled = false;
+      return;
+    }
+
+    if (!res.ok) {
+      clearInterval(pollTimer);
+      document.getElementById('progress-title').textContent = `Error (${res.status})`;
+      runBtn.disabled = false;
+      return;
+    }
+
+    const job = await res.json();
+    appendLogs(job.log || []);
+
+    const total = (job.functions || []).length * (job.modes || []).length;
+    const done  = (job.log || []).filter(l => l.startsWith('  ✓') || l.startsWith('  ✗')).length;
+    const pct   = total > 0 ? Math.min(95, 5 + (done / total) * 90) : 50;
+    document.getElementById('progress-bar').style.width = pct + '%';
+
+    if (job.status === 'done') {
+      clearInterval(pollTimer);
+      document.getElementById('progress-bar').style.width = '100%';
+      document.getElementById('progress-title').textContent = 'Complete';
+      setTimeout(() => renderResults(job, jobId), 2500);
+    } else if (job.status === 'error') {
+      clearInterval(pollTimer);
+      document.getElementById('progress-title').textContent = 'Error';
+      runBtn.disabled = false;
+    }
+  } catch (e) {
+    clearInterval(pollTimer);
+    document.getElementById('progress-title').textContent = 'Network error';
+    runBtn.disabled = false;
+  }
+}
+
+function appendLogs(logs) {
+  const box = document.getElementById('log-box');
+  const newLogs = logs.slice(lastLogLen);
+  lastLogLen = logs.length;
+  newLogs.forEach(msg => {
+    const div = document.createElement('div');
+    if (msg.startsWith('  ✓')) div.className = 'ok';
+    else if (msg.startsWith('  ✗') || msg.toLowerCase().includes('error')) div.className = 'err';
+    else if (msg.startsWith('Saving') || msg === 'Done.') div.className = 'dim';
+    div.textContent = msg;
+    box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
+  });
+}
+
+// ── Results rendering ───────────────────────────────────────────
+function renderResults(job, jid) {
+  hide('progress-section');
+  show('results-section');
+
+  const r = job.results;
+  if (!r) return;
+
+  renderSummaryCards(r.mode_summary || []);
+  renderPerFuncTable(r.per_function || []);
+  populateResultChunkSel(job.functions || []);
+  renderFailures(r.failures || []);
+  renderDownloads(r.downloads || [], jid);
+  loadReport(jid);
+}
+
+function renderSummaryCards(modeSummary) {
+  const grid = document.getElementById('summary-grid');
+  grid.innerHTML = '';
+  modeSummary.forEach(row => {
+    const pr  = row.avg_pass_rate   != null ? row.avg_pass_rate.toFixed(1) + '%' : 'N/A';
+    const cov = row.avg_function_coverage != null ? row.avg_function_coverage.toFixed(1) + '%' : 'N/A';
+    const mut = row.avg_mutation_score != null ? row.avg_mutation_score.toFixed(4) : 'N/A';
+    const val = row.avg_value_assert_ratio != null ? row.avg_value_assert_ratio.toFixed(2) : 'N/A';
+    grid.innerHTML += `
+      <div class="summary-card">
+        <div class="mode-label">${row.mode}</div>
+        <div class="metric"><span>Pass rate</span><span class="val">${pr}</span></div>
+        <div class="metric"><span>Func coverage</span><span class="val">${cov}</span></div>
+        <div class="metric"><span>Mutation score</span><span class="val">${mut}</span></div>
+        <div class="metric"><span>Val assert ratio</span><span class="val">${val}</span></div>
+        <div class="metric" style="margin-top:6px;font-size:.8rem;color:#6b7280">
+          <span>${row.total_passed}/${row.total_tests} tests passed</span>
+        </div>
+      </div>`;
+  });
+}
+
+function passBadge(rate) {
+  if (rate == null) return '<span class="badge">N/A</span>';
+  const pct = (rate * 100).toFixed(1);
+  const cls = rate >= .9 ? 'badge-ok' : rate >= .7 ? 'badge-warn' : 'badge-err';
+  return `<span class="badge ${cls}">${pct}%</span>`;
+}
+
+function renderPerFuncTable(rows) {
+  const tbody = document.getElementById('per-func-body');
+  tbody.innerHTML = '';
+  if (!rows.length) { tbody.innerHTML = '<tr><td colspan="9" class="empty-state">No data</td></tr>'; return; }
+  rows.forEach(r => {
+    const mut = r.mutation_score != null ? r.mutation_score.toFixed(4) : 'N/A';
+    const val = r.value_assertion_ratio != null ? r.value_assertion_ratio.toFixed(2) : 'N/A';
+    const cov = r.function_coverage_pct != null ? r.function_coverage_pct.toFixed(1) + '%' : 'N/A';
+    tbody.innerHTML += `<tr>
+      <td><strong>${r.function}</strong></td>
+      <td>${r.category || '—'}</td>
+      <td><code style="font-size:.8rem;background:#f1f5f9;padding:2px 6px;border-radius:3px">${r.mode}</code></td>
+      <td>${r.total_tests ?? '—'}</td>
+      <td>${r.passed ?? '—'}</td>
+      <td>${passBadge(r.pass_rate != null ? r.pass_rate/100 : null)}</td>
+      <td>${cov}</td>
+      <td>${mut}</td>
+      <td>${val}</td>
+    </tr>`;
+  });
+}
+
+const CATEGORY_COLORS = {
+  oracle_error:               '#fee2e2',
+  type_assumption_error:      '#fef9c3',
+  hallucinated_behavior:      '#fce7f3',
+  wrong_exception_type:       '#ffedd5',
+  expected_exception_missing: '#f3e8ff',
+  unsupported_edge_case:      '#e0f2fe',
+  syntax_error:               '#fee2e2',
+  import_error:               '#fee2e2',
+  flaky_generation:           '#f1f5f9',
+};
+
+function renderFailures(failures) {
+  const list = document.getElementById('failures-list');
+  if (!failures.length) {
+    list.innerHTML = '<div class="empty-state">No failures recorded.</div>';
+    return;
+  }
+  list.innerHTML = '';
+  failures.forEach((f, i) => {
+    const bg = CATEGORY_COLORS[f.category] || '#f1f5f9';
+    const item = document.createElement('div');
+    item.className = 'failure-item';
+    item.innerHTML = `
+      <div class="failure-header" onclick="toggleFailure(${i})">
+        <span style="font-weight:600">${f.function}</span>
+        <span style="color:#6b7280">·</span>
+        <code style="font-size:.8rem">${f.mode}</code>
+        <span style="flex:1;color:#374151;font-size:.83rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f.test}</span>
+        <span class="badge" style="background:${bg};color:#1f2937;font-size:.77rem">${f.category}</span>
+      </div>
+      <div class="failure-body" id="fb-${i}" style="display:none">
+        <div><strong>Detail:</strong> ${f.detail || '—'}</div>
+      </div>`;
+    list.appendChild(item);
+  });
+}
+
+function toggleFailure(i) {
+  const body = document.getElementById('fb-' + i);
+  body.style.display = body.style.display === 'none' ? 'block' : 'none';
+}
+
+function renderDownloads(files, jid) {
+  const grid = document.getElementById('dl-grid');
+  grid.innerHTML = '';
+  const icons = { '.csv': '⬇ CSV', '.json': '⬇ JSON', '.md': '⬇ Markdown' };
+  files.forEach(name => {
+    const ext = name.slice(name.lastIndexOf('.'));
+    const label = (icons[ext] || '⬇') + ' ' + name;
+    grid.innerHTML += `<a class="dl-btn" href="/api/jobs/${jid}/files/${name}" download="${name}">${label}</a>`;
+  });
+}
+
+async function loadReport(jid) {
+  try {
+    const res  = await fetch(`/api/jobs/${jid}/files/report.md`);
+    const text = await res.text();
+    document.getElementById('report-content').innerHTML = marked.parse(text);
+  } catch { document.getElementById('report-content').textContent = 'Report not available.'; }
+}
+
+// ── Tabs ─────────────────────────────────────────────────────────
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+  });
+});
+
+// ── New run ───────────────────────────────────────────────────────
+document.getElementById('new-run-btn').addEventListener('click', () => {
+  clearInterval(pollTimer);
+  jobId = null; uploadedFile = null; lastLogLen = 0;
+  fileInput.value = '';
+  fileName.style.display = 'none';
+  dropzone.classList.remove('filled');
+  runBtn.disabled = true;
+  document.getElementById('chunk-toggle-btn').style.display = 'none';
+  document.getElementById('chunk-explorer').style.display = 'none';
+  hide('results-section'); hide('progress-section');
+  show('upload-card');
+});
+
+// ── Helpers ───────────────────────────────────────────────────────
+function show(id) { document.getElementById(id).style.display = 'block'; }
+function hide(id) { document.getElementById(id).style.display = 'none'; }
+
+// ── Chunk Explorer (pre-run) ──────────────────────────────────────
+function toggleChunkExplorer() {
+  const el  = document.getElementById('chunk-explorer');
+  const btn = document.getElementById('chunk-toggle-btn');
+  const open = el.style.display === 'none' || el.style.display === '';
+  el.style.display  = open ? 'block' : 'none';
+  btn.style.background = open ? '#dbeafe' : '#eff6ff';
+}
+
+function populateChunkFuncSel(functions) {
+  const sel = document.getElementById('ce-func-sel');
+  sel.innerHTML = '<option value="">— select function —</option>';
+  functions.forEach(f => {
+    const opt = document.createElement('option');
+    opt.value = opt.textContent = f;
+    sel.appendChild(opt);
+  });
+  document.getElementById('ce-preview-btn').disabled = false;
+  document.getElementById('chunk-toggle-btn').style.display = 'inline-flex';
+}
+
+async function previewChunk() {
+  const target    = document.getElementById('ce-func-sel').value;
+  const chunkMode = document.getElementById('ce-mode-sel').value;
+  const errEl     = document.getElementById('ce-error');
+  errEl.style.display = 'none';
+
+  if (!target) { errEl.textContent = 'Select a function first.'; errEl.style.display = 'block'; return; }
+  if (!uploadedFile) { errEl.textContent = 'No file uploaded.'; errEl.style.display = 'block'; return; }
+
+  const btn = document.getElementById('ce-preview-btn');
+  btn.disabled = true; btn.textContent = 'Loading…';
+
+  const fd = new FormData();
+  fd.append('file', uploadedFile);
+  fd.append('target', target);
+  fd.append('chunk_mode', chunkMode);
+
+  try {
+    const res = await fetch('/api/chunk-preview', { method: 'POST', body: fd });
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(e.detail || res.statusText);
+    }
+    const data = await res.json();
+    renderChunkResult(data, 'ce-meta', 'ce-sections');
+    document.getElementById('ce-result').style.display = 'block';
+  } catch (e) {
+    errEl.textContent = 'Error: ' + e.message;
+    errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Preview';
+  }
+}
+
+// ── Chunk tab (post-run) ──────────────────────────────────────────
+function populateResultChunkSel(functions) {
+  const sel = document.getElementById('rc-func-sel');
+  sel.innerHTML = '<option value="">— select function —</option>';
+  functions.forEach(f => {
+    const opt = document.createElement('option');
+    opt.value = opt.textContent = f;
+    sel.appendChild(opt);
+  });
+}
+
+async function previewJobChunk() {
+  const target    = document.getElementById('rc-func-sel').value;
+  const chunkMode = document.getElementById('rc-mode-sel').value;
+  const errEl     = document.getElementById('rc-error');
+  errEl.style.display = 'none';
+
+  if (!target) { errEl.textContent = 'Select a function first.'; errEl.style.display = 'block'; return; }
+  if (!jobId)  { errEl.textContent = 'No active job.'; errEl.style.display = 'block'; return; }
+
+  const btn = document.getElementById('rc-preview-btn');
+  btn.disabled = true; btn.textContent = 'Loading…';
+
+  const fd = new FormData();
+  fd.append('target', target);
+  fd.append('chunk_mode', chunkMode);
+
+  try {
+    const res = await fetch(`/api/jobs/${jobId}/chunk-preview`, { method: 'POST', body: fd });
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(e.detail || res.statusText);
+    }
+    const data = await res.json();
+    renderChunkResult(data, 'rc-meta', 'rc-sections');
+    document.getElementById('rc-result').style.display = 'block';
+  } catch (e) {
+    errEl.textContent = 'Error: ' + e.message;
+    errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Preview';
+  }
+}
+
+// ── Shared chunk renderer ─────────────────────────────────────────
+function renderChunkResult(data, metaId, sectionsId) {
+  document.getElementById(metaId).innerHTML = `
+    <span class="pill">Strategy: <strong>${data.mode_used}</strong></span>
+    <span class="pill">Target: <strong>${data.target}</strong></span>
+    <span class="pill">Tokens: <strong>${data.tokens_used.toLocaleString()}</strong></span>
+    <span class="pill">Est. cost: <strong>$${data.cost_estimate_usd.toFixed(6)}</strong></span>`;
+
+  const sections = [
+    { label: '📦 Imports',               cls: 'cs-imports', text: data.imports },
+    { label: '🏛 Class Header',           cls: 'cs-class',   text: data.class_header },
+    { label: '🎯 Target Function/Method', cls: 'cs-target',  text: data.target_source },
+    { label: '🔗 Helper Dependencies',   cls: 'cs-deps',    text: (data.dependency_sources || []).join('\n\n') },
+    { label: '📋 Summary Stubs',         cls: 'cs-summary', text: data.summary_context },
+  ];
+
+  const container = document.getElementById(sectionsId);
+  container.innerHTML = '';
+  let any = false;
+  sections.forEach(s => {
+    if (!s.text || !s.text.trim()) return;
+    any = true;
+    const div = document.createElement('div');
+    div.className = `chunk-section ${s.cls}`;
+    div.innerHTML = `<div class="cs-label">${s.label}</div><pre>${escHtml(s.text)}</pre>`;
+    container.appendChild(div);
+  });
+  if (!any) container.innerHTML = '<div style="color:#9ca3af;font-size:.88rem;padding:10px 0">No context assembled for this mode.</div>';
+}
+
+function escHtml(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+</script>
+</body>
+</html>
