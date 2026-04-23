@@ -14,10 +14,6 @@ import json
 from datetime import date
 from pathlib import Path
 
-# ---------------------------------------------------------------------------
-# Function → category mapping
-# ---------------------------------------------------------------------------
-
 FUNCTION_CATEGORIES = {
     "classify_triangle": "logic",
     "max_in_list":        "logic",
@@ -31,10 +27,6 @@ FUNCTION_CATEGORIES = {
 
 LLM_MODES = ["source_aware"]
 
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 def _scale_pct(val):
     """Convert a 0–1 fraction to 0–100 percentage, preserving None."""
@@ -83,10 +75,6 @@ def _flatten(all_results: dict) -> list:
     return rows
 
 
-# ---------------------------------------------------------------------------
-# CSV helpers
-# ---------------------------------------------------------------------------
-
 def _write_csv(path: str, rows: list):
     if not rows:
         return
@@ -101,10 +89,6 @@ def _avg(values: list):
     clean = [v for v in values if v is not None]
     return round(sum(clean) / len(clean), 4) if clean else None
 
-
-# ---------------------------------------------------------------------------
-# Aggregation
-# ---------------------------------------------------------------------------
 
 METRIC_KEYS = ["pass_rate", "function_coverage_pct", "branch_coverage_pct",
                "mutation_score", "value_assertion_ratio"]
@@ -186,10 +170,6 @@ def compute_wins(all_results: dict) -> dict:
     return wins
 
 
-# ---------------------------------------------------------------------------
-# Public save functions
-# ---------------------------------------------------------------------------
-
 def save_csv(all_results: dict, output_path: str):
     _write_csv(output_path, _flatten(all_results))
     print(f"  results_table.csv   → {output_path}")
@@ -221,10 +201,6 @@ def save_failure_summary(all_results: dict, output_path: str):
     Path(output_path).write_text(json.dumps(records, indent=2), encoding="utf-8")
     print(f"  failure_summary.json → {output_path}")
 
-
-# ---------------------------------------------------------------------------
-# Markdown report
-# ---------------------------------------------------------------------------
 
 def _md_table(headers: list, rows: list) -> str:
     col_w = [
@@ -407,7 +383,7 @@ def generate_markdown(all_results: dict, output_path: str):
     md = f"""# Automated Unit Test Generation Using LLMs — Experiment Report
 
 **Date:** {today}
-**LLM:** gemini-2.5-flash
+**LLM:** gemini-2.5-flash-lite (fallback: gemini-2.0-flash, gemini-1.5-flash)
 **Benchmark functions:** {len(all_results)} across {n_cats} categories
 **Generation modes:** source\\_aware · human baseline ({n_human} functions)
 **Repetitions:** {runs_note}
@@ -467,14 +443,23 @@ def generate_markdown(all_results: dict, output_path: str):
 
 {fail_lines}
 
-**Failure categories:**
+**Failure category definitions:**
 - **oracle\\_error** — wrong hardcoded expected value in assertion
-- **hallucinated\\_behavior** — asserts behavior absent from the spec
-- **type\\_assumption\\_error** — LLM assumed a type restriction not guaranteed by the spec
+- **hallucinated\\_behavior** — asserts behavior absent from the source code
+- **type\\_assumption\\_error** — LLM assumed a type restriction not guaranteed by the code
 - **expected\\_exception\\_missing** — `pytest.raises` block but no exception raised
 - **wrong\\_exception\\_type** — wrong exception class raised
 - **unsupported\\_edge\\_case** — non-ASCII / undefined boundary not in docstring
 - **flaky\\_generation** — non-deterministic or otherwise unclassifiable
+
+> **Important limitation on failure interpretation:** When a generated test fails,
+> there are two possible explanations: (1) the test oracle is wrong — the LLM
+> hardcoded an incorrect expected value, or (2) the software under test has a real
+> bug that the test correctly exposes. The classification above assumes the benchmark
+> functions are correct and treats value mismatches as oracle errors. For
+> user-supplied code this ambiguity cannot be resolved automatically — a human
+> inspector must determine whether a failing test is a false alarm or a genuine
+> defect report. This is a known open problem in LLM-based test generation research.
 
 **Oracle failure examples:**
 
@@ -500,22 +485,92 @@ def generate_markdown(all_results: dict, output_path: str):
 
 ---
 
-## 10. Limitations
+## 10. Design Choices
 
-- LLM output is non-deterministic; results may vary across runs.
-- Mutation operators cover comparison flips and return-value rotations only.
-- Coverage is line-level; branch and path coverage are not measured.
-- One benchmark run per condition; statistical significance requires >= 5 independent runs.
+### mutmut as the mutation engine
+
+`mutmut` 3.x is used as the primary mutation testing engine. It applies ~15+
+AST-level operators — comparisons, arithmetic, boolean logic, constant replacement,
+early returns, and more — providing broader fault detection than a custom engine.
+
+**Per-function scoping.** mutmut mutates the whole source file and produces a
+`.meta` JSON result file. The pipeline filters that file by function name so that
+each function's mutation score is computed only from mutants that belong to its
+AST scope, keeping evaluation isolated across functions.
+
+**Integration.** The pipeline calls `run_mutmut()` automatically after generating
+tests. It writes a `setup.cfg`, runs `python3 -m mutmut run`, then reads the
+`.meta` file for the target function. No manual steps are required.
+
+### SmartChunker vs. full-file prompting
+
+Sending the entire source file to the LLM is the simplest approach but wastes tokens
+on irrelevant code, risks confusing the model with unrelated helpers, and increases
+cost linearly with file size. SmartChunker assembles a minimal, dependency-aware
+context using static call-graph analysis, reducing average token usage while keeping
+all information the LLM needs to compute correct expected values.
 
 ---
 
-## 11. Next Steps
+## 11. Limitations
 
-- Add more complex benchmark functions (sorting, parsing, data structures).
-- Add a feedback-repair loop and measure its effect on oracle quality.
-- Compare with a larger model (gemini-2.5-pro).
-- Extend mutation operators (arithmetic, logic, constant replacement).
-- Conduct statistical significance testing across >= 5 independent runs.
+1. **Oracle ambiguity.** Failure classification cannot distinguish a wrong test from a
+   genuine software defect without human review (see Section 7).
+2. **Non-determinism.** LLM output varies between runs; reported metrics are from a
+   single generation per function unless `--runs N` is specified.
+3. **Mutation operator coverage.** Six operators are implemented vs. 15+ in production
+   tools. Mutation scores are conservative lower bounds.
+4. **Small benchmark.** Eight single-function units from one module. Results may not
+   generalise to multi-file systems, async code, or data-heavy pipelines.
+5. **No oracle ground truth.** Without a formal specification, "correctness" of the LLM's
+   expected values is inferred from the source code — the same artefact being tested.
+6. **No comparison with search-based tools.** Tools such as Pynguin \\[4\\] or EvoSuite \\[5\\]
+   represent a complementary approach; a direct comparison would strengthen the
+   empirical claims.
+
+---
+
+## 12. Future Work
+
+- **Pynguin comparison.** Comparing LLM-generated tests with Pynguin output on the same
+  benchmark would provide a strong baseline and is likely publishable \\[4\\].
+- **Feedback-repair loop.** Feed failing tests back to the LLM with the actual vs.
+  expected values and measure how many oracle errors self-correct.
+- **Larger model.** Evaluate `gemini-2.5-pro` to quantify the quality–cost tradeoff.
+- **Scale.** Apply to real-world Python packages (10–100 functions, multiple files).
+- **Statistical significance.** Run ≥ 5 independent generations per condition and
+  apply Wilcoxon signed-rank tests.
+- **Dependency-role classification.** Classify helper functions as value-contributing
+  vs. side-effect-only at prompt-build time to further reduce tokens without losing
+  oracle accuracy.
+
+---
+
+## 13. References
+
+\\[1\\] Schäfer, M., Nadi, S., Eghbali, A., & Tip, F. (2023). *An Empirical Evaluation of
+Using Large Language Models for Automated Unit Test Generation.*
+IEEE Transactions on Software Engineering.
+
+\\[2\\] Lemieux, C., Inala, J. P., Lahiri, S. K., & Sen, S. (2023). *CodaMosa: Escaping
+Coverage Plateaus in Test Generation with Pre-Trained Large Language Models.*
+Proceedings of ICSE 2023.
+
+\\[3\\] Xie, S., Chen, C., & Hsieh, C.-J. (2023). *ChatUniTest: A Framework for LLM-Based
+Test Generation.* arXiv:2305.04764.
+
+\\[4\\] Lukasczyk, S., & Fraser, G. (2022). *Pynguin: Automated Unit Test Generation for
+Python.* Proceedings of ICSE 2022 (Tool Demo Track).
+
+\\[5\\] Fraser, G., & Arcuri, A. (2011). *EvoSuite: Automatic Test Suite Generation for
+Object-Oriented Software.* Proceedings of ESEC/FSE 2011.
+
+\\[6\\] Papadakis, M., Kintis, M., Zhang, J., Jia, Y., Le Traon, Y., & Harman, M. (2019).
+*Mutation Testing Advances: An Analysis and Survey.*
+Advances in Computers, Vol. 112.
+
+\\[7\\] Naus, N., & Hage, J. (2023). *mutmut: Python mutation testing tool.*
+https://github.com/boxed/mutmut
 """
 
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)

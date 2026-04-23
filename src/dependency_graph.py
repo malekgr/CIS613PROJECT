@@ -24,17 +24,10 @@ class DependencyGraph:
     def __init__(self, source: str) -> None:
         self._source = source
         self._tree = ast.parse(source)
-        # qualified_name -> ast.FunctionDef
         self._nodes: dict[str, ast.FunctionDef] = {}
-        # class_name -> [qualified method names]
         self._class_methods: dict[str, list[str]] = {}
-        # qualified_name -> set of qualified names it directly calls
         self._calls: dict[str, set[str]] = {}
         self._build()
-
-    # ------------------------------------------------------------------
-    # Build
-    # ------------------------------------------------------------------
 
     def _build(self) -> None:
         for node in self._tree.body:
@@ -79,10 +72,6 @@ class DependencyGraph:
             if obj in self._class_methods:
                 return f"{obj}.{attr}"
         return None
-
-    # ------------------------------------------------------------------
-    # Query API
-    # ------------------------------------------------------------------
 
     def dependencies(self, target: str, max_depth: int = 5) -> list[str]:
         """
@@ -136,10 +125,6 @@ class DependencyGraph:
             if isinstance(node, (ast.Import, ast.ImportFrom))
         ]
         return "\n".join(lines)
-
-    # ------------------------------------------------------------------
-    # Factory helpers
-    # ------------------------------------------------------------------
 
     @classmethod
     def from_file(cls, path: str) -> "DependencyGraph":

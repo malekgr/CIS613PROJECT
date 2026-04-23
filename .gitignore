@@ -2,6 +2,8 @@
 generated_tests/
 results/
 jobs/
+mutants/
+setup.cfg
 
 # Python
 __pycache__/

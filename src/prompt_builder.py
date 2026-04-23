@@ -30,7 +30,6 @@ def build_chunked_prompt(chunk: "ChunkContext") -> str:
 ```
 """
 
-    # Determine the correct import line based on whether target is a method
     if chunk.class_name:
         import_line = f"from {import_path} import {chunk.class_name}"
         instantiation_hint = (

@@ -1,3 +1,4 @@
 google-genai>=1.0.0
 pytest>=8.0.0
 pytest-cov>=5.0.0
+mutmut>=3.3.0

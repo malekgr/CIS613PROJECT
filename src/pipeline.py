@@ -7,7 +7,7 @@ from src.parser import extract_context
 from src.prompt_builder import build_prompt, build_chunked_prompt
 from src.llm_generator import generate_tests
 from src.test_runner import run_tests
-from src.metrics import compute_mutation_score, analyze_assertions, compute_coverage
+from src.metrics import run_mutmut, compute_mutation_score, analyze_assertions, compute_coverage
 from src.failure_analyzer import classify_failures, summarize_failures
 
 
@@ -27,7 +27,7 @@ def _generate_and_save(func, source, function_name, mode, root, import_path=None
 def _collect_metrics(source_file, function_name, test_file, project_root, run_result, coverage_path):
     """Aggregate all metrics into a flat dict."""
     cov = compute_coverage(coverage_path, function_name, source_file)
-    mutation = compute_mutation_score(source_file, function_name, str(test_file), project_root)
+    mutation = compute_mutation_score(source_file, function_name, project_root)
     assertion_stats = analyze_assertions(str(test_file))
     failures = classify_failures(run_result["stdout"], run_result["stderr"])
 
@@ -204,7 +204,8 @@ def run_pipeline(
 
     _cb("  → computing coverage & mutation score…")
     if verbose:
-        print("[+] Mutation + assertions + failure analysis")
+        print("[+] Running mutmut + assertions + failure analysis")
+    run_mutmut(source_file, str(test_file), project_root)
     metrics = _collect_metrics(
         source_file, bare_name, test_file, project_root, run_result, coverage_path
     )

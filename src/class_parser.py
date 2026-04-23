@@ -50,10 +50,6 @@ def parse_target(target: str) -> tuple[str | None, str]:
     return None, target
 
 
-# ------------------------------------------------------------------
-# Internal helpers
-# ------------------------------------------------------------------
-
 def _parse_class(cls_node: ast.ClassDef) -> ClassInfo:
     bases = [ast.unparse(b) for b in cls_node.bases]
     docstring = ast.get_docstring(cls_node) or ""

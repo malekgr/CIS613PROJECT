@@ -4,7 +4,6 @@ from pathlib import Path
 from src.pipeline import run_pipeline
 from src.failure_analyzer import summarize_failures
 
-# All functions in the benchmark dataset
 BENCHMARK_FUNCTIONS = [
     "classify_triangle",
     "factorial",
@@ -16,7 +15,6 @@ BENCHMARK_FUNCTIONS = [
     "count_vowels",
 ]
 
-# Functions that have a hand-written human baseline
 HUMAN_BASELINE_FUNCTIONS = BENCHMARK_FUNCTIONS
 
 LLM_MODES = ["source_aware"]

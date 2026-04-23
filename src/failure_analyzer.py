@@ -8,10 +8,6 @@ Parsing strategy:
 """
 import re
 
-# ---------------------------------------------------------------------------
-# Category constants
-# ---------------------------------------------------------------------------
-
 ORACLE_ERROR            = "oracle_error"           # wrong hardcoded expected value
 HALLUCINATED_BEHAVIOR   = "hallucinated_behavior"   # behavior absent from the spec
 TYPE_ASSUMPTION_ERROR   = "type_assumption_error"   # LLM assumed type restriction not in spec
@@ -22,10 +18,6 @@ IMPORT_ERROR            = "import_error"            # import / attribute lookup 
 UNSUPPORTED_EDGE_CASE   = "unsupported_edge_case"   # edge case not covered by the spec
 FLAKY_GENERATION        = "flaky_generation"        # non-deterministic or ambiguous assertion
 
-
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
 
 def classify_failures(pytest_stdout: str, pytest_stderr: str) -> list:
     """
@@ -52,10 +44,6 @@ def summarize_failures(failures: list) -> dict:
     return counts
 
 
-# ---------------------------------------------------------------------------
-# Section extraction
-# ---------------------------------------------------------------------------
-
 def _extract_failures_section(stdout: str) -> str:
     """Pull just the text between '=== FAILURES ===' and the very next '===' banner.
 
@@ -72,8 +60,7 @@ def _extract_failures_section(stdout: str) -> str:
     return "\n" + stdout[start:end]
 
 
-# Pattern that looks like a real pytest test name (function identifier, optionally
-# with parametrize brackets).  Coverage/platform lines are excluded.
+# Matches pytest test names; filters out coverage/platform lines pytest-cov injects.
 _TEST_NAME_RE = re.compile(r"^test_\w+", re.IGNORECASE)
 
 
@@ -96,10 +83,6 @@ def _split_into_blocks(failures_text: str) -> tuple:
             blocks.append(block)
     return blocks, names
 
-
-# ---------------------------------------------------------------------------
-# Block classification
-# ---------------------------------------------------------------------------
 
 def _classify_block(test_name: str, block: str) -> dict:
     assertion = _extract_assertion_line(block)
@@ -164,10 +147,6 @@ def _classify_value_mismatch(test_name: str, assertion: str,
         return UNSUPPORTED_EDGE_CASE, "Edge case not specified in function docstring"
     return ORACLE_ERROR, f"Wrong expected value: got {actual!r}, asserted {expected!r}"
 
-
-# ---------------------------------------------------------------------------
-# Parsing helpers
-# ---------------------------------------------------------------------------
 
 def _extract_assertion_line(block: str) -> str:
     """Find the `assert ...` line inside the block."""
@@ -267,10 +246,6 @@ def _is_unsupported_edge_case(test_name: str, assertion: str) -> bool:
     )
     return bool(signals)
 
-
-# ---------------------------------------------------------------------------
-# Collection-level errors
-# ---------------------------------------------------------------------------
 
 def _parse_collection_errors(stdout: str, stderr: str) -> list:
     combined = stdout + stderr

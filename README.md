@@ -45,7 +45,7 @@ echo 'export GEMINI_API_KEY="your-api-key-here"' >> ~/.bashrc && source ~/.bashr
 
 ## Running the Project
 
-### Option A — Web Interface (recommended)
+### Web Interface
 
 ```bash
 python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
@@ -65,45 +65,7 @@ Open **http://localhost:8000** in your browser.
 4. Review results in the tabs: per-function metrics, failure inspector, chunk viewer, Markdown report
 5. Download CSV / JSON / Markdown from the **Downloads** tab
 
----
 
-### Option B — CLI: Single Function
-
-```bash
-# Built-in benchmark function
-python main.py --target classify_triangle
-
-# Your own file and function
-python main.py --file path/to/your_module.py --target MyClass.my_method
-
-# With explicit chunking strategy
-python main.py --target factorial --chunking-mode function_plus_deps
-```
-
----
-
-### Option C — CLI: Full Benchmark
-
-Runs all 8 built-in functions and compares LLM-generated tests against a human baseline:
-
-```bash
-python run_benchmark.py
-```
-
-Options:
-
-```bash
-# Specific functions only
-python run_benchmark.py --functions classify_triangle factorial is_prime
-
-# 3 independent LLM generations per function, results averaged
-python run_benchmark.py --runs 3
-
-# Skip human baseline comparison
-python run_benchmark.py --no-human
-```
-
-Results are saved to `results/benchmark/summaries/`.
 
 ---
 
@@ -174,18 +136,7 @@ The web UI automatically uses:
 | **Mutation score** | Fraction of injected code faults detected by the tests |
 | **Value assertion ratio** | Fraction of assertions checking concrete values (not bare truthiness) |
 
-### Mutation operators
 
-The built-in mutation engine applies six AST-level operators scoped strictly to the target function:
-
-| Operator | Example |
-|----------|---------|
-| Comparison flip | `==` ↔ `!=`, `<` ↔ `<=`, `>` ↔ `>=` |
-| Arithmetic flip | `+` ↔ `-`, `*` ↔ `//`, `%` ↔ `*` |
-| BoolOp flip | `and` ↔ `or` |
-| `not` removal | `not x` → `x` |
-| Off-by-one | integer constant `n` → `n − 1` |
-| String return rotation | rotates string constants returned by the function |
 
 ### Failure categories
 
@@ -229,13 +180,10 @@ You will see `[fallback] succeeded with gemini-2.0-flash` in the progress log wh
 
 ---
 
-## Troubleshooting
+## Design Choices
 
-| Problem | Fix |
-|---------|-----|
-| `KeyError: 'GEMINI_API_KEY'` | Run `export GEMINI_API_KEY="your-key"` before starting the server |
-| `503 UNAVAILABLE` | Handled automatically by the fallback chain — if all models fail, wait a few minutes and retry |
-| `command not found: uvicorn` | Use `python3 -m uvicorn ...` or run `pip install -r requirements_app.txt` |
-| All metrics show N/A | API key was missing when the job ran — set the key and click **New run** |
-| `ModuleNotFoundError` | Always run commands from the project root directory, not from inside a subdirectory |
-| Port 8000 already in use | Kill the existing process: `lsof -ti:8000 \| xargs kill -9` |
+### SmartChunker vs. full-file prompting
+
+Sending the entire file to the LLM wastes tokens on irrelevant code and increases cost linearly with file size. SmartChunker uses static AST call-graph analysis to assemble only the context the LLM needs: the target function, its transitive dependencies, and (for class methods) a condensed class shell with full source for directly-called siblings. This reduces token usage while keeping all information needed to compute correct expected values.
+
+---

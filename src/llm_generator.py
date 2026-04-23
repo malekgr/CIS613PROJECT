@@ -1,12 +1,13 @@
+from __future__ import annotations
+
 import os
 import time
 from google import genai
 
 
 _MAX_RETRIES = 3
-_RETRY_BASE_DELAY = 10  # seconds; doubles each attempt
+_RETRY_BASE_DELAY = 10
 
-# Models tried in order when 503/429/UNAVAILABLE is encountered
 _MODEL_FALLBACK_CHAIN = [
     "gemini-2.5-flash",
     "gemini-2.0-flash",

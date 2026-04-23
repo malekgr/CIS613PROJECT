@@ -29,10 +29,6 @@ from src.class_parser import ClassInfo, parse_classes, parse_target
 from src.token_budget import TokenBudget, estimate_cost_usd, estimate_tokens
 
 
-# ---------------------------------------------------------------------------
-# Public types
-# ---------------------------------------------------------------------------
-
 class ChunkMode(Enum):
     FUNCTION_ONLY         = "function_only"
     FUNCTION_PLUS_DEPS    = "function_plus_deps"
@@ -67,10 +63,6 @@ class ChunkContext:
     import_path: str = ""
 
 
-# ---------------------------------------------------------------------------
-# SmartChunker
-# ---------------------------------------------------------------------------
-
 class SmartChunker:
     """Assembles a ChunkContext for any target using the chosen ChunkMode."""
 
@@ -82,10 +74,6 @@ class SmartChunker:
         self._token_limit = token_limit
         self._graph = DependencyGraph(self._source)
         self._classes = parse_classes(self._source)
-
-    # ------------------------------------------------------------------
-    # Public entry point
-    # ------------------------------------------------------------------
 
     def build(
         self,
@@ -127,10 +115,6 @@ class SmartChunker:
         ctx.tokens_used = estimate_tokens(assembled)
         ctx.cost_estimate_usd = estimate_cost_usd(ctx.tokens_used)
         return ctx
-
-    # ------------------------------------------------------------------
-    # Chunking strategies
-    # ------------------------------------------------------------------
 
     def _full_source(
         self, ctx: ChunkContext, *_
@@ -219,10 +203,6 @@ class SmartChunker:
 
         ctx.dependency_sources = dep_sources
         return ctx
-
-    # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
 
     def _dep_sources(self, qualified: str) -> list[str]:
         return [

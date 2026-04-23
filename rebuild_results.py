@@ -29,8 +29,8 @@ FUNCTIONS = [
     "classify_triangle", "factorial", "is_prime", "gcd",
     "reverse_string", "is_palindrome", "max_in_list", "count_vowels",
 ]
-MODES = ["source_aware", "spec_only"]
-HUMAN_FUNCTIONS = FUNCTIONS  # all 8 functions have human baselines now
+MODES = ["source_aware"]
+HUMAN_FUNCTIONS = FUNCTIONS
 
 SOURCE_FILE = str(ROOT / "dataset" / "sample_functions.py")
 RESULTS_DIR = ROOT / "results" / "benchmark"
@@ -77,7 +77,7 @@ def _rerun_and_classify(test_file: Path, mode: str, func: str, run_tag: str = ""
     coverage_path = str(RESULTS_DIR / "raw" / subdir / f"coverage_{func}.json")
     run = run_tests(str(test_file), str(ROOT), coverage_output=coverage_path)
 
-    cov = compute_coverage(coverage_path, func)
+    cov = compute_coverage(coverage_path, func, SOURCE_FILE)
     failures = classify_failures(run["stdout"], run["stderr"])
     assertion_stats = analyze_assertions(str(test_file))
 
@@ -107,7 +107,6 @@ def _build_entry(mode: str, func: str) -> dict:
     tags = _run_tags(mode)
 
     if tags:
-        # Multi-run: average across all run subdirectories
         records = []
         for tag in tags:
             test_file = ROOT / "generated_tests" / mode / tag / f"test_{func}.py"
@@ -125,7 +124,6 @@ def _build_entry(mode: str, func: str) -> dict:
               f"mut={entry['mutation_score']}")
         return entry
 
-    # Single run
     test_file = ROOT / "generated_tests" / mode / f"test_{func}.py"
     if not test_file.exists():
         print(f"  [skip] {mode}/{func} — test file missing")
@@ -169,15 +167,14 @@ def rebuild() -> dict:
         all_results[func]["human"] = entry
 
     # Remove empty function entries
-    all_results = {f: m for f, m in all_results.items() if m}
-    return all_results
+    return {f: m for f, m in all_results.items() if m}
 
 
-def _mode_winner(sa: int, so: int) -> str:
-    if sa > so:
+def _mode_winner(sa: int, hu: int) -> str:
+    if sa > hu:
         return "source_aware"
-    if so > sa:
-        return "spec_only"
+    if hu > sa:
+        return "human"
     return "tie"
 
 
@@ -207,8 +204,7 @@ def _print_summary(all_results: dict) -> None:
     print(f"\n{sep}")
     print("  BENCHMARK SUMMARY")
     print(sep)
-    print(f"  Functions completed : {total_funcs} of {len(FUNCTIONS) * len(MODES)} "
-          f"({len(FUNCTIONS)} funcs x {len(MODES)} modes)")
+    print(f"  Functions completed : {total_funcs} / {len(FUNCTIONS)} functions")
 
     for row in mode_sum:
         _print_mode_row(row)
@@ -220,11 +216,11 @@ def _print_summary(all_results: dict) -> None:
     else:
         print("\n  Most common failure : none recorded")
 
-    print("\n  Mode wins (source_aware vs spec_only):")
+    print("\n  Mode wins (source_aware vs human):")
     for mk in METRIC_KEYS:
-        sa = wins["source_aware"][mk]
-        so = wins["spec_only"][mk]
-        print(f"    {mk:<25} source_aware={sa}  spec_only={so}  -> {_mode_winner(sa, so)}")
+        sa = wins.get("source_aware", {}).get(mk, 0)
+        hu = wins.get("human", {}).get(mk, 0)
+        print(f"    {mk:<25} source_aware={sa}  human={hu}  -> {_mode_winner(sa, hu)}")
     print()
 
 
